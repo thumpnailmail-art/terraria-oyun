@@ -943,6 +943,17 @@ function render(){
   drawToolTarget();
 }
 
+
+
+// Görünmez canvas imzası
+ctx.globalAlpha = 0.008;
+ctx.font = 'bold 60px monospace';
+ctx.fillStyle = '#ffffff';
+ctx.textAlign = 'center';
+ctx.fillText('[SENİN ADIN] · YEŞİL VADİ · 2026', VW/2, VH/2);
+ctx.globalAlpha = 1;
+ctx.textAlign = 'left';
+
 function drawTile(x, y, season){
   const t = world.tiles[y][x];
   const sx = Math.floor(x*TILE - camera.x);
