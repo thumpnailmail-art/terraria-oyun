@@ -1606,4 +1606,28 @@ function simulateLoading(){
 }
 setTimeout(simulateLoading, 300);
 requestAnimationFrame(loop);
+// ============ CAYDIRICI KORUMA ============
+document.addEventListener('contextmenu', e => {
+  if(e.target.tagName === 'CANVAS') e.preventDefault();
+});
 
+document.addEventListener('keydown', e => {
+  // F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U engelle
+  if(
+    e.key === 'F12' ||
+    (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) ||
+    (e.ctrlKey && (e.key === 'U' || e.key === 'u'))
+  ){
+    e.preventDefault();
+    console.clear();
+    console.log('%c⛔ Bu kod telif hakkı ile korunmaktadır.', 'color:#ff4444;font-size:20px;font-weight:bold');
+    console.log('%c© 2026 [SENİN ADIN] - Tüm Hakları Saklıdır', 'color:#ffd24a;font-size:14px');
+    return false;
+  }
+});
+
+// Konsol açılırsa uyarı bas
+console.log('%c⛔ YEŞİL VADİ', 'color:#ffd24a;font-size:30px;font-weight:bold;text-shadow:2px 2px 0 #000');
+console.log('%cBu oyunun kodu telif hakkı ile korunmaktadır.', 'color:#fff;font-size:14px');
+console.log('%c© 2026 [SENİN ADIN] — Tüm Hakları Saklıdır', 'color:#888;font-size:12px');
+console.log('%cİzinsiz kopyalama yasal işlem gerektirir.', 'color:#ff4444;font-size:12px;font-weight:bold');
