@@ -1575,13 +1575,13 @@ function loadGame(){
 
 // ==================== ANA DÖNGÜ ====================
 function loop(now){
+  requestAnimationFrame(loop);
   const dt = Math.min(0.1, (now - lastT) / 1000);
   lastT = now;
+  if(!world || !player) return;
   update(dt);
   render();
-  requestAnimationFrame(loop);
 }
-
 // ==================== BAŞLAT ====================
 const loadingFill = document.getElementById('loadFill');
 const loadingTxt = document.getElementById('loadTxt');
