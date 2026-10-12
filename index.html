@@ -3,62 +3,60 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Terraria Sandbox</title>
+<title>Çiftlik Hayatı</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <canvas id="game"></canvas>
 
-<div id="ui">
-  <div id="stats">
-    <div class="bar">
-      <span class="icon">❤️</span>
-      <div class="track"><div class="fill hpFill" id="hpFill"></div></div>
-      <span class="txt" id="hpTxt">100/100</span>
-    </div>
-    <div class="bar">
-      <span class="icon">✨</span>
-      <div class="track"><div class="fill mpFill" id="mpFill"></div></div>
-      <span class="txt" id="mpTxt">50/50</span>
+<div id="hud">
+  <div id="topBar">
+    <div class="stat"><span class="ic">💰</span><span id="moneyTxt">500g</span></div>
+    <div class="stat"><span class="ic">⚡</span><div class="bar"><div id="energyFill" class="fill"></div></div><span id="energyTxt">100/100</span></div>
+    <div class="stat"><span class="ic">🕐</span><span id="clockTxt">6:00</span></div>
+    <div class="stat"><span class="ic">📅</span><span id="dayTxt">Gün 1</span></div>
+  </div>
+  <div id="hotbar"></div>
+  <div id="hint">Sol tık: Alet kullan · E: Etkileşim · 1-6: Slot</div>
+</div>
+
+<div id="shopPanel">
+  <div class="shopHeader">
+    <h2>🏪 Pierre'in Dükkanı</h2>
+    <button class="closeBtn" id="closeShop">✖</button>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-tab="buy">Al</button>
+    <button class="tab" data-tab="sell">Sat</button>
+  </div>
+  <div id="shopContent"></div>
+</div>
+
+<div id="bedPanel">
+  <div class="bedBox">
+    <h2>🛏️ Uyumak ister misin?</h2>
+    <p id="bedDayInfo">Yarın yeni bir gün başlayacak.</p>
+    <div class="bedButtons">
+      <button id="sleepYes" class="yes">Evet, uyu</button>
+      <button id="sleepNo" class="no">Hayır</button>
     </div>
   </div>
-  <div id="info"></div>
 </div>
 
-<div id="bossBar">
-  <div class="fill" id="bossFill"></div>
-  <div class="name" id="bossName">EYE OF CTHULHU</div>
-</div>
-
-<div id="hotbar"></div>
-<div id="controls">WASD: Hareket · Sol Tık: Kaz/Saldır · Sağ Tık: Koy/Kullan · 1-9/Tekerlek · C: Üret</div>
-
-<button id="craftBtn">🛠️ Üretim</button>
-<button id="saveBtn">💾 Kaydet</button>
-
-<div id="tooltip"></div>
-
-<div id="craftPanel">
-  <h3>🛠️ Üretim Menüsü</h3>
-  <div id="recipeList"></div>
-  <button class="closeBtn" id="closeCraft">Kapat</button>
-</div>
-
-<div id="chestPanel">
-  <h3>📦 Sandık</h3>
-  <div id="chestGrid"></div>
-  <div class="hint">Envanterinden eşya koymak için aşağıdaki slotlara tıkla:</div>
-  <div id="invGrid"></div>
-  <button class="closeBtn" id="closeChest">Kapat</button>
+<div id="dialogBox">
+  <div class="dlgPortrait">🧑‍🌾</div>
+  <div class="dlgText" id="dlgText"></div>
 </div>
 
 <div id="toast"></div>
 
-<div id="touchControls">
-  <div class="tbtn" id="btnLeft">◀</div>
-  <div class="tbtn" id="btnRight">▶</div>
-  <div class="tbtn" id="btnJump">▲</div>
-  <div class="tbtn" id="btnUse">⛏️</div>
+<div id="touch">
+  <div class="tbtn" id="tbUp">▲</div>
+  <div class="tbtn" id="tbDown">▼</div>
+  <div class="tbtn" id="tbLeft">◀</div>
+  <div class="tbtn" id="tbRight">▶</div>
+  <div class="tbtn" id="tbAct">⛏️</div>
+  <div class="tbtn" id="tbE">E</div>
 </div>
 
 <script src="game.js"></script>
