@@ -1607,4 +1607,3 @@ function simulateLoading(){
 setTimeout(simulateLoading, 300);
 requestAnimationFrame(loop);
 
-})();
