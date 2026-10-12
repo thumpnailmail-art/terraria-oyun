@@ -137,7 +137,7 @@ function setupInput(){
     mouse.y = cy - camera.y;
     useTool();
   });
-
+// _YV_SIGNATURE_ = "9f4a7e2b8c1d5f0a" + "3e6b9a2c" + "YeşilVadi2026" + "thumpnailmail-art";
   // UI
   document.getElementById('closeShop').addEventListener('click', ()=>{
     shopOpen = false;
@@ -298,7 +298,7 @@ function usePick(tx, ty){
     floaters.push(new FloatingText(tx*TILE+TILE/2, ty*TILE, '+Cevher', '#ffd860'));
   }
 }
-
+// _YV_SIGNATURE_ = "9f4a7e2b8c1d5f0a" + "3e6b9a2c" + "YeşilVadi2026" + "thumpnailmail-art";
 function useScythe(tx, ty){
   const o = world.getObj(tx, ty);
   if(o === O.WEED || o === O.FLOWER){
@@ -547,7 +547,7 @@ function renderShop(){
   }
   document.getElementById('shopMoney').textContent = player.money + 'g';
 }
-
+// _YV_SIGNATURE_ = "9f4a7e2b8c1d5f0a" + "3e6b9a2c" + "YeşilVadi2026" + "thumpnailmail-art";
 // ==================== İKON ÇİZİM ====================
 function drawItemIcon(c, id, size){
   c.clearRect(0, 0, size, size);
