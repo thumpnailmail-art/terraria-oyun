@@ -1,11 +1,10 @@
-import { TILE, ITEMS, NPCS } from './data.js';
+import { TILE, O, NPCS, CROPS } from './data.js';
 
 // ==================== OYUNCU ====================
 export class Player {
   constructor(x, y){
     this.x = x; this.y = y;
     this.w = 20; this.h = 26;
-    this.vx = 0; this.vy = 0;
     this.facing = 'down';
     this.animT = 0;
     this.moving = false;
@@ -15,18 +14,16 @@ export class Player {
     this.swingT = 0;
     this.swingX = 0;
     this.swingY = 0;
-    this.walkFrame = 0;
-    this.tired = false;
-    this.sleeping = false;
+    this.water = 0;      // sulama kabı dolu mu
+    this.maxWater = 20;
   }
 
   update(dt, world, input){
-    // Hareket
     let dx = 0, dy = 0;
-    if(input.left)  dx -= 1;
+    if(input.left) dx -= 1;
     if(input.right) dx += 1;
-    if(input.up)    dy -= 1;
-    if(input.down)  dy += 1;
+    if(input.up) dy -= 1;
+    if(input.down) dy += 1;
     this.moving = (dx !== 0 || dy !== 0);
 
     if(this.moving){
@@ -37,28 +34,19 @@ export class Player {
       if(dx !== 0 && dy !== 0){ dx *= 0.707; dy *= 0.707; }
       this.animT += dt * 10;
       const spd = this.energy <= 0 ? 1.2 : 2.4;
-      // Yatay
       let nx = this.x + dx * spd;
       if(!this.hitSolid(nx, this.y, world)) this.x = nx;
-      // Dikey
       let ny = this.y + dy * spd;
       if(!this.hitSolid(this.x, ny, world)) this.y = ny;
     } else {
       this.animT = 0;
     }
 
-    // Enerji tükenme efekti
-    if(this.energy <= 0){
-      this.tired = true;
-      this.energy = 0;
-    }
-
-    // Alet sallanması
     if(this.swingT > 0) this.swingT -= dt;
 
     // Sınırlar
-    const W = world.tiles[0].length * TILE;
-    const H = world.tiles.length * TILE;
+    const W = (world.isMine() ? world.mineTiles[0].length : world.tiles[0].length) * TILE;
+    const H = (world.isMine() ? world.mineTiles.length : world.tiles.length) * TILE;
     this.x = Math.max(0, Math.min(W - this.w, this.x));
     this.y = Math.max(0, Math.min(H - this.h, this.y));
   }
@@ -68,7 +56,7 @@ export class Player {
       [px, py], [px+this.w, py], [px, py+this.h], [px+this.w, py+this.h]
     ];
     for(const [cx, cy] of corners){
-      const tx = Math.floor(cx / TILE), ty = Math.floor(cy / TILE);
+      const tx = Math.floor(cx/TILE), ty = Math.floor(cy/TILE);
       if(world.isSolidTile(tx, ty)) return true;
     }
     return false;
@@ -80,91 +68,83 @@ export class Player {
     if(this.energy < 0) this.energy = 0;
     return true;
   }
-
-  rest(){
-    // Yatakta uyuyunca enerji dolar
-    this.energy = this.maxEnergy;
-    this.tired = false;
-  }
+  heal(n){ this.hp = Math.min(this.maxHp, this.hp + n); }
 
   serialize(){
-    return {
-      x: this.x, y: this.y,
-      energy: this.energy, hp: this.hp,
-      money: this.money, facing: this.facing
-    };
+    return { x:this.x, y:this.y, energy:this.energy, hp:this.hp, money:this.money, facing:this.facing, water:this.water };
   }
   static deserialize(d){
     const p = new Player(d.x, d.y);
-    p.energy = d.energy;
-    p.hp = d.hp;
-    p.money = d.money;
+    p.energy = d.energy; p.hp = d.hp; p.money = d.money;
     p.facing = d.facing || 'down';
+    p.water = d.water || 0;
     return p;
   }
 }
 
 // ==================== NPC ====================
 export class NPC {
-  constructor(id, x, y){
+  constructor(id){
     this.id = id;
     this.def = NPCS[id];
     this.name = this.def.name;
-    this.x = x; this.y = y;
+    this.x = this.def.homeX * TILE;
+    this.y = this.def.homeY * TILE;
     this.w = 18; this.h = 26;
-    this.vx = 0; this.vy = 0;
     this.facing = 'down';
     this.animT = 0;
     this.moving = false;
-    this.state = 'idle'; // idle, walk
-    this.stateT = 0;
-    this.targetX = x; this.targetY = y;
-    this.homeX = x; this.homeY = y;
+    this.targetX = this.x;
+    this.targetY = this.y;
+    this.waitT = 0;
     this.greeted = false;
+    this.scheduleIdx = -1;
   }
 
   update(dt, world){
-    this.stateT -= dt;
-    if(this.state === 'idle' && this.stateT <= 0){
-      // Rastgele bir yere yürü
-      this.state = 'walk';
-      this.stateT = 1.5 + Math.random() * 3;
-      const angle = Math.random() * Math.PI * 2;
-      const dist = 1 + Math.random() * 3;
-      this.targetX = this.homeX + Math.cos(angle) * dist * TILE;
-      this.targetY = this.homeY + Math.sin(angle) * dist * TILE;
-    } else if(this.state === 'walk' && this.stateT <= 0){
-      this.state = 'idle';
-      this.stateT = 1 + Math.random() * 3;
+    // Program kontrolü
+    const h = world.minute;
+    let schedule = null;
+    for(const s of this.def.schedule){
+      if(h >= s.from && h < s.to){ schedule = s; break; }
+    }
+    if(!schedule) schedule = this.def.schedule[0];
+
+    const schedKey = schedule.label + schedule.from;
+    if(schedKey !== this.scheduleIdx){
+      this.scheduleIdx = schedKey;
+      this.targetX = schedule.x * TILE;
+      this.targetY = schedule.y * TILE;
     }
 
-    if(this.state === 'walk'){
-      const dx = this.targetX - this.x;
-      const dy = this.targetY - this.y;
-      const d = Math.hypot(dx, dy);
-      if(d > 3){
-        const spd = 0.7;
-        let nx = this.x + (dx/d) * spd;
-        let ny = this.y + (dy/d) * spd;
-        if(dy < -Math.abs(dx)) this.facing = 'up';
-        else if(dy > Math.abs(dx)) this.facing = 'down';
+    // Hedefe yürü
+    const dx = this.targetX - this.x;
+    const dy = this.targetY - this.y;
+    const d = Math.hypot(dx, dy);
+    if(d > 4){
+      this.waitT -= dt;
+      if(this.waitT <= 0){
+        const spd = 1.5;
+        const step = Math.min(spd, d);
+        const nx = this.x + (dx/d) * step;
+        const ny = this.y + (dy/d) * step;
+        if(dy < -Math.abs(dx)*0.5) this.facing = 'up';
+        else if(dy > Math.abs(dx)*0.5) this.facing = 'down';
         else if(dx < 0) this.facing = 'left';
         else this.facing = 'right';
-        // Basit çarpışma
-        const c = this.hitSolid(nx, this.y, world);
-        if(!c) this.x = nx;
-        const c2 = this.hitSolid(this.x, ny, world);
-        if(!c2) this.y = ny;
+
+        if(!this.hitSolid(nx, this.y, world)) this.x = nx;
+        else this.waitT = 0.2;
+        if(!this.hitSolid(this.x, ny, world)) this.y = ny;
+        else this.waitT = 0.2;
+
         this.animT += dt * 8;
         this.moving = true;
-      } else {
-        this.state = 'idle';
-        this.stateT = 1 + Math.random() * 3;
-        this.moving = false;
       }
     } else {
       this.moving = false;
       this.animT = 0;
+      this.waitT = 0.5 + Math.random();
     }
   }
 
@@ -173,117 +153,118 @@ export class NPC {
       [px, py], [px+this.w, py], [px, py+this.h], [px+this.w, py+this.h]
     ];
     for(const [cx, cy] of corners){
-      const tx = Math.floor(cx / TILE), ty = Math.floor(cy / TILE);
+      const tx = Math.floor(cx/TILE), ty = Math.floor(cy/TILE);
       if(world.isSolidTile(tx, ty)) return true;
     }
     return false;
   }
 
-  getDialog(world){
+  getDialog(){
     const lines = this.greeted ? this.def.dialog : this.def.greeting;
-    let line = lines[Math.floor(Math.random() * lines.length)];
-    // Mevsim bazlı ek
-    const seasonNames = ['ilkbahar','yaz','sonbahar','kış'];
-    if(Math.random() < 0.3){
-      line += ' ' + seasonNames[world.season].charAt(0).toUpperCase() + seasonNames[world.season].slice(1) + ' mevsimi harika!';
-    }
     this.greeted = true;
-    return line;
+    return lines[Math.floor(Math.random() * lines.length)];
   }
 }
 
-// ==================== PARÇACIK SİSTEMİ ====================
-export class ParticleSystem {
-  constructor(){
-    this.particles = [];
-  }
-  emit(x, y, opts){
-    const n = opts.count || 5;
-    for(let i=0; i<n; i++){
-      const angle = opts.angle !== undefined ? opts.angle + (Math.random()-0.5) * (opts.spread || 1) : Math.random() * Math.PI * 2;
-      const speed = (opts.speed || 2) * (0.5 + Math.random() * 0.8);
-      this.particles.push({
-        x, y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed + (opts.gravity || 0) * 0.5,
-        color: opts.color || '#fff',
-        size: opts.size || 3,
-        life: opts.life || 0.6,
-        maxLife: opts.life || 0.6,
-        gravity: opts.gravity || 0.15,
-        fade: opts.fade !== false,
-        shrink: opts.shrink !== false
-      });
-    }
-  }
-  update(dt){
-    for(let i=this.particles.length-1; i>=0; i--){
-      const p = this.particles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += p.gravity;
-      p.vx *= 0.97;
-      p.vy *= 0.97;
-      p.life -= dt;
-      if(p.life <= 0) this.particles.splice(i, 1);
-    }
-  }
-  draw(ctx, camera){
-    for(const p of this.particles){
-      const a = p.fade ? (p.life / p.maxLife) : 1;
-      const s = p.shrink ? p.size * (p.life / p.maxLife) : p.size;
-      ctx.globalAlpha = a;
-      ctx.fillStyle = p.color;
-      ctx.fillRect(
-        Math.floor(p.x - camera.x - s/2),
-        Math.floor(p.y - camera.y - s/2),
-        Math.max(1, Math.ceil(s)), Math.max(1, Math.ceil(s))
-      );
-    }
-    ctx.globalAlpha = 1;
-  }
-}
-
-// ==================== KONUŞMA BALONU ====================
-export class FloatingText {
-  constructor(x, y, text, color){
+// ==================== HAYVAN ====================
+export class Animal {
+  constructor(type, x, y){
+    this.type = type; // 'chicken' veya 'cow'
     this.x = x; this.y = y;
-    this.text = text;
-    this.color = color || '#fff';
-    this.life = 1.4;
-    this.maxLife = 1.4;
-    this.vy = -0.8;
+    this.w = type === 'chicken' ? 16 : 24;
+    this.h = type === 'chicken' ? 16 : 22;
+    this.facing = 'right';
+    this.animT = 0;
+    this.moving = false;
+    this.targetX = x; this.targetY = y;
+    this.waitT = 0;
+    this.fed = false;
+    this.produceReady = false;
+    this.produceTimer = 0;
+    this.happy = true;
   }
-  update(dt){
-    this.y += this.vy;
-    this.vy *= 0.94;
-    this.life -= dt;
+
+  update(dt, world){
+    // Rastgele dolaş
+    this.waitT -= dt;
+    if(this.waitT <= 0){
+      this.targetX = this.x + (Math.random() - 0.5) * 100;
+      this.targetY = this.y + (Math.random() - 0.5) * 100;
+      this.waitT = 2 + Math.random() * 3;
+    }
+
+    const dx = this.targetX - this.x;
+    const dy = this.targetY - this.y;
+    const d = Math.hypot(dx, dy);
+    if(d > 4){
+      const spd = this.type === 'chicken' ? 0.6 : 0.4;
+      const nx = this.x + (dx/d) * spd;
+      const ny = this.y + (dy/d) * spd;
+      if(dx < 0) this.facing = 'left';
+      else this.facing = 'right';
+      if(!this.hitSolid(nx, this.y, world)) this.x = nx;
+      if(!this.hitSolid(this.x, ny, world)) this.y = ny;
+      this.animT += dt * 6;
+      this.moving = true;
+    } else {
+      this.moving = false;
+      this.animT = 0;
+    }
+
+    // Ürün hazır olma
+    this.produceTimer += dt;
+    if(this.fed && !this.produceReady && this.produceTimer > 30){
+      this.produceReady = true;
+    }
   }
-  draw(ctx, camera){
-    const a = Math.min(1, this.life / this.maxLife * 2);
-    ctx.globalAlpha = a;
-    ctx.font = 'bold 14px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#000';
-    ctx.fillText(this.text, this.x - camera.x + 1, this.y - camera.y + 1);
-    ctx.fillStyle = this.color;
-    ctx.fillText(this.text, this.x - camera.x, this.y - camera.y);
-    ctx.globalAlpha = 1;
-    ctx.textAlign = 'left';
+
+  hitSolid(px, py, world){
+    const corners = [[px, py], [px+this.w, py], [px, py+this.h], [px+this.w, py+this.h]];
+    for(const [cx, cy] of corners){
+      const tx = Math.floor(cx/TILE), ty = Math.floor(cy/TILE);
+      if(world.isSolidTile(tx, ty)) return true;
+    }
+    return false;
+  }
+
+  feed(){
+    this.fed = true;
+    this.happy = true;
+  }
+
+  collect(){
+    if(!this.produceReady) return null;
+    this.produceReady = false;
+    this.fed = false;
+    this.produceTimer = 0;
+    if(this.type === 'chicken'){
+      return Math.random() < 0.15 ? 'large_egg' : 'egg';
+    } else {
+      return Math.random() < 0.15 ? 'large_milk' : 'milk';
+    }
+  }
+
+  serialize(){
+    return { type:this.type, x:this.x, y:this.y, fed:this.fed, produceReady:this.produceReady, produceTimer:this.produceTimer };
+  }
+  static deserialize(d){
+    const a = new Animal(d.type, d.x, d.y);
+    a.fed = d.fed;
+    a.produceReady = d.produceReady;
+    a.produceTimer = d.produceTimer || 0;
+    return a;
   }
 }
 
-// ==================== SPRITE ÇİZİM ====================
+// ==================== ÇİZİM: İNSAN ====================
 export function drawHumanoid(ctx, sx, sy, w, h, opts){
   const facing = opts.facing || 'down';
-  const walkFrame = opts.walkFrame || 0;
-  const bob = walkFrame * 1.2;
+  const bob = (opts.walkFrame || 0) * 1.2;
   const skin = opts.skinColor || '#f0c090';
   const shirt = opts.shirtColor || '#4a7ac0';
   const pants = opts.pantsColor || '#3a3a5a';
   const hair = opts.hairColor || '#5a2a10';
 
-  // Gölge
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath();
   ctx.ellipse(sx + w/2, sy + h - 1, w/2, 3, 0, 0, Math.PI*2);
@@ -291,7 +272,6 @@ export function drawHumanoid(ctx, sx, sy, w, h, opts){
 
   // Bacaklar
   ctx.fillStyle = pants;
-  const legOff = 3;
   if(facing === 'left' || facing === 'right'){
     ctx.fillRect(sx + 5, sy + h - 10 + bob, 4, 10);
     ctx.fillRect(sx + w - 9, sy + h - 10 - bob, 4, 10);
@@ -326,204 +306,117 @@ export function drawHumanoid(ctx, sx, sy, w, h, opts){
 
   // Kafa
   ctx.fillStyle = skin;
-  ctx.fillRect(sx + 3, sy + h - 27, w - 6, 10);
+  ctx.fillRect(sx + 3, sy + h - 27 + bob, w - 6, 10);
 
   // Saç
   ctx.fillStyle = hair;
   if(facing === 'up'){
-    ctx.fillRect(sx + 2, sy + h - 28, w - 4, 9);
+    ctx.fillRect(sx + 2, sy + h - 28 + bob, w - 4, 9);
   } else {
-    ctx.fillRect(sx + 2, sy + h - 28, w - 4, 5);
-    ctx.fillRect(sx + 1, sy + h - 26, 3, 5);
-    ctx.fillRect(sx + w - 4, sy + h - 26, 3, 5);
+    ctx.fillRect(sx + 2, sy + h - 28 + bob, w - 4, 5);
+    ctx.fillRect(sx + 1, sy + h - 26 + bob, 3, 5);
+    ctx.fillRect(sx + w - 4, sy + h - 26 + bob, 3, 5);
   }
 
   // Yüz
   if(facing === 'down'){
     ctx.fillStyle = '#000';
-    ctx.fillRect(sx + 6, sy + h - 24, 2, 3);
-    ctx.fillRect(sx + w - 8, sy + h - 24, 2, 3);
+    ctx.fillRect(sx + 6, sy + h - 24 + bob, 2, 3);
+    ctx.fillRect(sx + w - 8, sy + h - 24 + bob, 2, 3);
     ctx.fillStyle = '#c08060';
-    ctx.fillRect(sx + w/2 - 1, sy + h - 21, 2, 1);
+    ctx.fillRect(sx + w/2 - 1, sy + h - 21 + bob, 2, 1);
   } else if(facing === 'left'){
     ctx.fillStyle = '#000';
-    ctx.fillRect(sx + 5, sy + h - 24, 2, 3);
+    ctx.fillRect(sx + 5, sy + h - 24 + bob, 2, 3);
   } else if(facing === 'right'){
     ctx.fillStyle = '#000';
-    ctx.fillRect(sx + w - 7, sy + h - 24, 2, 3);
+    ctx.fillRect(sx + w - 7, sy + h - 24 + bob, 2, 3);
   }
 }
 
-export function drawPlayerSprite(ctx, player, camera, currentItem){
-  const sx = Math.floor(player.x - camera.x);
-  const sy = Math.floor(player.y - camera.y);
-  const walkFrame = player.moving ? Math.sin(player.animT) : 0;
-  const bob = walkFrame * 1.2;
-
-  const opts = {
-    facing: player.facing,
-    walkFrame,
-    skinColor: '#f0c090',
-    shirtColor: '#4a7ac0',
-    pantsColor: '#3a3a5a',
-    hairColor: '#5a2a10'
-  };
+// ==================== ÇİZİM: HAYVAN ====================
+export function drawAnimal(ctx, sx, sy, animal){
+  const bob = animal.moving ? Math.sin(animal.animT) * 1.5 : 0;
+  const face = animal.facing === 'right' ? 1 : -1;
 
   // Gölge
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
-  ctx.ellipse(sx + player.w/2, sy + player.h - 1, player.w/2, 3, 0, 0, Math.PI*2);
+  ctx.ellipse(sx + animal.w/2, sy + animal.h - 1, animal.w/2, 3, 0, 0, Math.PI*2);
   ctx.fill();
 
-  // Bacaklar
-  ctx.fillStyle = opts.pantsColor;
-  ctx.fillRect(sx + 3, sy + player.h - 10 + bob, 5, 10);
-  ctx.fillRect(sx + player.w - 8, sy + player.h - 10 - bob, 5, 10);
-
-  // Gövde
-  ctx.fillStyle = opts.shirtColor;
-  ctx.fillRect(sx + 2, sy + player.h - 18, player.w - 4, 10);
-
-  // Kollar
-  ctx.fillStyle = opts.shirtColor;
-  if(player.facing === 'left'){
-    ctx.fillRect(sx - 1, sy + player.h - 17 + bob, 4, 7);
-  } else if(player.facing === 'right'){
-    ctx.fillRect(sx + player.w - 3, sy + player.h - 17 + bob, 4, 7);
-  } else {
-    ctx.fillRect(sx - 1, sy + player.h - 17 + bob, 3, 6);
-    ctx.fillRect(sx + player.w - 2, sy + player.h - 17 - bob, 3, 6);
-  }
-
-  // Kafa
-  ctx.fillStyle = opts.skinColor;
-  ctx.fillRect(sx + 3, sy + player.h - 27 + bob, player.w - 6, 10);
-
-  // Saç
-  ctx.fillStyle = opts.hairColor;
-  if(player.facing === 'up'){
-    ctx.fillRect(sx + 2, sy + player.h - 28 + bob, player.w - 4, 9);
-  } else {
-    ctx.fillRect(sx + 2, sy + player.h - 28 + bob, player.w - 4, 5);
-    ctx.fillRect(sx + 1, sy + player.h - 26 + bob, 3, 5);
-    ctx.fillRect(sx + player.w - 4, sy + player.h - 26 + bob, 3, 5);
-  }
-
-  // Yüz
-  if(player.facing === 'down'){
+  if(animal.type === 'chicken'){
+    // Bacaklar
+    ctx.fillStyle = '#e8a850';
+    ctx.fillRect(sx + 4, sy + 10 + bob, 2, 6);
+    ctx.fillRect(sx + 10, sy + 10 - bob, 2, 6);
+    // Gövde
+    ctx.fillStyle = '#f8f0e0';
+    ctx.beginPath();
+    ctx.ellipse(sx + 8, sy + 8, 8, 6, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Kanat
+    ctx.fillStyle = '#e8d8c0';
+    ctx.beginPath();
+    ctx.ellipse(sx + 8, sy + 7, 5, 3, 0.3, 0, Math.PI*2);
+    ctx.fill();
+    // Kafa
+    ctx.fillStyle = '#f8f0e0';
+    ctx.beginPath();
+    ctx.arc(sx + 8 + face * 5, sy + 3, 3, 0, Math.PI*2);
+    ctx.fill();
+    // Gaga
+    ctx.fillStyle = '#ffa030';
+    ctx.beginPath();
+    ctx.moveTo(sx + 8 + face * 8, sy + 3);
+    ctx.lineTo(sx + 8 + face * 11, sy + 4);
+    ctx.lineTo(sx + 8 + face * 8, sy + 5);
+    ctx.closePath();
+    ctx.fill();
+    // Göz
     ctx.fillStyle = '#000';
-    ctx.fillRect(sx + 6, sy + player.h - 24 + bob, 2, 3);
-    ctx.fillRect(sx + player.w - 8, sy + player.h - 24 + bob, 2, 3);
-  } else if(player.facing === 'left'){
-    ctx.fillStyle = '#000';
-    ctx.fillRect(sx + 5, sy + player.h - 24 + bob, 2, 3);
-  } else if(player.facing === 'right'){
-    ctx.fillStyle = '#000';
-    ctx.fillRect(sx + player.w - 7, sy + player.h - 24 + bob, 2, 3);
-  }
-
-  // Elde alet
-  if(currentItem && ITEMS[currentItem] && ITEMS[currentItem].type === 'tool'){
-    const toolX = player.facing === 'left' ? sx - 4 : (player.facing === 'right' ? sx + player.w : sx + player.w - 2);
-    const toolY = sy + player.h - 12 + bob;
-    drawToolInHand(ctx, toolX, toolY, currentItem, player.facing);
-  }
-
-  // Alet sallanırken efekt
-  if(player.swingT > 0 && currentItem){
-    const prog = 1 - player.swingT / 0.25;
-    const ttx = player.swingX * TILE - camera.x + TILE/2;
-    const tty = player.swingY * TILE - camera.y + TILE/2;
-    ctx.save();
-    ctx.translate(ttx, tty);
-    ctx.rotate(Math.sin(prog * Math.PI) * 0.9);
-    drawToolBig(ctx, currentItem);
-    ctx.restore();
-  }
-}
-
-function drawToolInHand(ctx, x, y, toolId, facing){
-  ctx.save();
-  ctx.translate(x, y);
-  if(facing === 'left') ctx.scale(-1, 1);
-  const t = toolId;
-  if(t === 'hoe'){
-    ctx.strokeStyle = '#6a4a2a'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(0, 8); ctx.lineTo(6, -2); ctx.stroke();
-    ctx.fillStyle = '#a8a8b8';
-    ctx.fillRect(5, -4, 6, 4);
-  } else if(t === 'can'){
-    ctx.fillStyle = '#6a8ac0';
-    ctx.fillRect(-3, 0, 8, 8);
-    ctx.fillStyle = '#4a6a9a';
+    ctx.fillRect(sx + 8 + face * 5, sy + 2, 1, 1);
+    // İbik
+    ctx.fillStyle = '#e03030';
     ctx.beginPath();
-    ctx.moveTo(5, 1); ctx.lineTo(9, -2); ctx.lineTo(9, 1); ctx.lineTo(5, 4);
-    ctx.closePath(); ctx.fill();
-  } else if(t === 'axe'){
-    ctx.strokeStyle = '#6a4a2a'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(0, 8); ctx.lineTo(6, -2); ctx.stroke();
-    ctx.fillStyle = '#a8a8b8';
-    ctx.beginPath();
-    ctx.moveTo(5, -4); ctx.lineTo(11, -1); ctx.lineTo(10, 3); ctx.lineTo(5, 1);
-    ctx.closePath(); ctx.fill();
-  } else if(t === 'pick'){
-    ctx.strokeStyle = '#6a4a2a'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(0, 8); ctx.lineTo(6, 0); ctx.stroke();
-    ctx.strokeStyle = '#a8a8b8'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(3, -3); ctx.lineTo(10, -1); ctx.stroke();
-  } else if(t === 'scythe'){
-    ctx.strokeStyle = '#6a4a2a'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(0, 10); ctx.lineTo(4, -2); ctx.stroke();
-    ctx.strokeStyle = '#c8c8d8'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(5, -2, 4, Math.PI*0.9, Math.PI*1.9); ctx.stroke();
-  } else if(t === 'rod'){
-    ctx.strokeStyle = '#8a5a2a'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(0, 10); ctx.lineTo(8, -4); ctx.stroke();
-    ctx.strokeStyle = '#ddd'; ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.moveTo(8, -4); ctx.lineTo(11, 4); ctx.stroke();
-  }
-  ctx.restore();
-}
-
-function drawToolBig(ctx, toolId){
-  const t = toolId;
-  if(t === 'hoe'){
-    ctx.strokeStyle = '#6a4a2a'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(-8, 12); ctx.lineTo(6, -6); ctx.stroke();
-    ctx.fillStyle = '#a8a8b8';
-    ctx.fillRect(4, -10, 12, 8);
-  } else if(t === 'can'){
-    ctx.fillStyle = '#6a8ac0';
-    ctx.fillRect(-8, 0, 12, 12);
-    ctx.fillStyle = '#4a6a9a';
-    ctx.beginPath();
-    ctx.moveTo(4, 2); ctx.lineTo(12, -4); ctx.lineTo(12, 4); ctx.lineTo(4, 8);
-    ctx.closePath(); ctx.fill();
-  } else if(t === 'axe'){
-    ctx.strokeStyle = '#6a4a2a'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(-8, 12); ctx.lineTo(6, -6); ctx.stroke();
-    ctx.fillStyle = '#a8a8b8';
-    ctx.beginPath();
-    ctx.moveTo(4, -10); ctx.lineTo(14, -4); ctx.lineTo(12, 4); ctx.lineTo(4, 0);
-    ctx.closePath(); ctx.fill();
-  } else if(t === 'pick'){
-    ctx.strokeStyle = '#6a4a2a'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(-8, 12); ctx.lineTo(6, -2); ctx.stroke();
-    ctx.strokeStyle = '#a8a8b8'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(12, -2); ctx.stroke();
-  } else if(t === 'scythe'){
-    ctx.strokeStyle = '#6a4a2a'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(-10, 14); ctx.lineTo(2, -6); ctx.stroke();
-    ctx.strokeStyle = '#c8c8d8'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(4, -6, 8, Math.PI*0.85, Math.PI*1.95); ctx.stroke();
-  } else if(t === 'rod'){
-    ctx.strokeStyle = '#8a5a2a'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(-10, 14); ctx.lineTo(8, -10); ctx.stroke();
+    ctx.arc(sx + 8 + face * 5, sy - 1, 1.5, 0, Math.PI*2);
+    ctx.fill();
   } else {
-    // Tohum ya da başka bir şey
-    ctx.fillStyle = '#8a6a3a';
-    ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = ITEMS[toolId]?.c || '#a0c040';
-    ctx.beginPath(); ctx.arc(0, -1, 4, 0, Math.PI*2); ctx.fill();
+    // İnek
+    // Bacaklar
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(sx + 3, sy + 14 + bob, 3, 8);
+    ctx.fillRect(sx + 8, sy + 14 + bob, 3, 8);
+    ctx.fillRect(sx + 14, sy + 14 + bob, 3, 8);
+    ctx.fillRect(sx + 19, sy + 14 + bob, 3, 8);
+    // Gövde
+    ctx.fillStyle = '#f8f0e0';
+    ctx.beginPath();
+    ctx.ellipse(sx + 12, sy + 12, 12, 7, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Lekeler
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath();
+    ctx.arc(sx + 8, sy + 10, 2.5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(sx + 17, sy + 13, 2, 0, Math.PI*2);
+    ctx.fill();
+    // Kafa
+    ctx.fillStyle = '#f8f0e0';
+    ctx.beginPath();
+    ctx.arc(sx + 12 + face * 12, sy + 6, 5, 0, Math.PI*2);
+    ctx.fill();
+    // Burun
+    ctx.fillStyle = '#f0a080';
+    ctx.beginPath();
+    ctx.arc(sx + 12 + face * 14, sy + 7, 2, 0, Math.PI*2);
+    ctx.fill();
+    // Göz
+    ctx.fillStyle = '#000';
+    ctx.fillRect(sx + 12 + face * 11, sy + 4, 1, 2);
+    // Boynuz
+    ctx.fillStyle = '#e8d8b0';
+    ctx.fillRect(sx + 12 + face * 12, sy + 0, 1, 3);
   }
 }
