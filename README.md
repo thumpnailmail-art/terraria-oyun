@@ -22,4 +22,4 @@ https://thumpnailmail-art.github.io/terraria-oyun/
 
 ## 📧 İletişim
 
-[E-POSTA ADRESİN]
+.....
