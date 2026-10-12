@@ -3,62 +3,83 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Çiftlik Hayatı</title>
+<title>Yeşil Vadi</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div id="loading">
+  <div class="loaderBox">
+    <div class="logo">🌾 YEŞİL VADİ</div>
+    <div class="loadingBar"><div class="loadingFill" id="loadFill"></div></div>
+    <div class="loadingTxt" id="loadTxt">Yükleniyor...</div>
+  </div>
+</div>
+
 <canvas id="game"></canvas>
 
 <div id="hud">
   <div id="topBar">
     <div class="stat"><span class="ic">💰</span><span id="moneyTxt">500g</span></div>
-    <div class="stat"><span class="ic">⚡</span><div class="bar"><div id="energyFill" class="fill"></div></div><span id="energyTxt">100/100</span></div>
+    <div class="stat"><span class="ic">⚡</span><div class="bar"><div id="energyFill" class="fill"></div></div></div>
+    <div class="stat"><span class="ic">❤️</span><div class="bar"><div id="hpFill" class="fill hp"></div></div></div>
+    <div class="stat seasonStat" id="seasonStat"><span id="seasonIcon">🌸</span><span id="dayTxt">Gün 1</span></div>
     <div class="stat"><span class="ic">🕐</span><span id="clockTxt">6:00</span></div>
-    <div class="stat"><span class="ic">📅</span><span id="dayTxt">Gün 1</span></div>
+    <div class="stat weatherStat" id="weatherStat">☀️</div>
   </div>
+
   <div id="hotbar"></div>
-  <div id="hint">Sol tık: Alet kullan · E: Etkileşim · 1-6: Slot</div>
-</div>
 
-<div id="shopPanel">
-  <div class="shopHeader">
-    <h2>🏪 Pierre'in Dükkanı</h2>
-    <button class="closeBtn" id="closeShop">✖</button>
+  <div id="hintBar">
+    <span>WASD: Yürü</span>
+    <span>Sol Tık: Alet</span>
+    <span>E: Etkileşim</span>
+    <span>1-8: Slot</span>
+    <span>ESC: Menü</span>
   </div>
-  <div class="tabs">
-    <button class="tab active" data-tab="buy">Al</button>
-    <button class="tab" data-tab="sell">Sat</button>
-  </div>
-  <div id="shopContent"></div>
-</div>
 
-<div id="bedPanel">
-  <div class="bedBox">
-    <h2>🛏️ Uyumak ister misin?</h2>
-    <p id="bedDayInfo">Yarın yeni bir gün başlayacak.</p>
-    <div class="bedButtons">
-      <button id="sleepYes" class="yes">Evet, uyu</button>
-      <button id="sleepNo" class="no">Hayır</button>
+  <div id="dialogBox">
+    <div class="dlgPortrait" id="dlgPortrait">🧑‍🌾</div>
+    <div class="dlgContent">
+      <div class="dlgName" id="dlgName">Rehber</div>
+      <div class="dlgText" id="dlgText"></div>
+    </div>
+    <div class="dlgNext">▼</div>
+  </div>
+
+  <div id="shopPanel">
+    <div class="panelHead">
+      <h2 id="shopTitle">🏪 Dükkan</h2>
+      <button class="closeBtn" id="closeShop">✖</button>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="buy">Al</button>
+      <button class="tab" data-tab="sell">Sat</button>
+    </div>
+    <div id="shopContent"></div>
+    <div class="shopFooter">💰 <span id="shopMoney">500g</span></div>
+  </div>
+
+  <div id="pausePanel">
+    <div class="panelHead"><h2>⏸️ Durduruldu</h2></div>
+    <div class="pauseMenu">
+      <button id="resumeBtn">▶️ Devam Et</button>
+      <button id="saveBtn">💾 Kaydet</button>
+      <button id="newBtn">🆕 Yeni Oyun</button>
     </div>
   </div>
+
+  <div id="toast"></div>
+
+  <div id="touchControls">
+    <div class="tbtn dpad" id="tbUp">▲</div>
+    <div class="tbtn dpad" id="tbDown">▼</div>
+    <div class="tbtn dpad" id="tbLeft">◀</div>
+    <div class="tbtn dpad" id="tbRight">▶</div>
+    <div class="tbtn action" id="tbAct">⛏️</div>
+    <div class="tbtn action" id="tbE">E</div>
+  </div>
 </div>
 
-<div id="dialogBox">
-  <div class="dlgPortrait">🧑‍🌾</div>
-  <div class="dlgText" id="dlgText"></div>
-</div>
-
-<div id="toast"></div>
-
-<div id="touch">
-  <div class="tbtn" id="tbUp">▲</div>
-  <div class="tbtn" id="tbDown">▼</div>
-  <div class="tbtn" id="tbLeft">◀</div>
-  <div class="tbtn" id="tbRight">▶</div>
-  <div class="tbtn" id="tbAct">⛏️</div>
-  <div class="tbtn" id="tbE">E</div>
-</div>
-
-<script src="game.js"></script>
+<script type="module" src="js/game.js"></script>
 </body>
 </html>
